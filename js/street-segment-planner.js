@@ -53,8 +53,17 @@ class StreetSegmentPlanner {
             const selectedSegments = this.selectSegmentsForText(text, segments);
             console.log(`選擇了 ${selectedSegments.length} 個片段來組成文字`);
             
+            if (selectedSegments.length === 0) {
+                throw new Error('找不到適合的街道片段來組成文字');
+            }
+            
             // 步驟 4: 規劃一筆畫路徑（允許折返）
             const continuousPath = await this.planContinuousPath(selectedSegments);
+            console.log(`規劃的連續路徑包含 ${continuousPath.length} 個點`);
+            
+            if (!continuousPath || continuousPath.length === 0) {
+                throw new Error('無法規劃連續路徑');
+            }
             
             // 步驟 5: 調整路徑以符合目標距離
             const finalRoute = await this.adjustRouteDistance(
@@ -62,6 +71,10 @@ class StreetSegmentPlanner {
                 minDistance, 
                 maxDistance
             );
+            
+            if (!finalRoute || finalRoute.length === 0) {
+                throw new Error('路徑調整失敗');
+            }
             
             return {
                 coordinates: finalRoute,
@@ -391,6 +404,13 @@ class StreetSegmentPlanner {
     // 延長路徑
     async extendPath(path, targetDistance) {
         const extended = [...path];
+        
+        // 檢查路徑是否為空
+        if (!extended || extended.length === 0) {
+            console.error('路徑為空，無法延長');
+            return extended;
+        }
+        
         let currentDistance = this.calculateTotalDistance(extended);
         const neededDistance = targetDistance - currentDistance;
         
@@ -400,6 +420,13 @@ class StreetSegmentPlanner {
         
         // 策略：在路徑末端添加來回繞行
         const lastPoint = extended[extended.length - 1];
+        
+        // 檢查最後一點是否有效
+        if (!lastPoint || typeof lastPoint.lat !== 'number' || typeof lastPoint.lng !== 'number') {
+            console.error('最後一點無效:', lastPoint);
+            return extended;
+        }
+        
         const extensionDistance = neededDistance / 2; // 來回距離
         
         // 找一個附近的點作為繞行目標
