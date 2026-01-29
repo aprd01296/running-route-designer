@@ -92,9 +92,9 @@ class StreetSegmentPlanner {
     calculateSearchRadius(minDistance, maxDistance) {
         // 根據目標距離計算合適的搜尋範圍
         const avgDistance = (minDistance + maxDistance) / 2;
-        // 優化：限制最大搜索半徑為 3km，減少 API 負載
-        const calculatedRadius = avgDistance * 200; // 減少倍數從 250 到 200
-        return Math.min(3000, Math.max(500, calculatedRadius)); // 以米為單位，最大 3km
+        // 放寬搜索範圍：允許更大的搜索半徑，找到更多道路選擇
+        const calculatedRadius = avgDistance * 400; // 增加倍數以找到更多道路
+        return Math.min(5000, Math.max(1000, calculatedRadius)); // 以米為單位，最大 5km
     }
 
     // 從 Overpass API 獲取附近街道（帶重試機制）
@@ -210,11 +210,12 @@ class StreetSegmentPlanner {
         const deltaLat = Math.abs(end.lat - start.lat);
         const deltaLng = Math.abs(end.lng - start.lng);
         
-        // 判斷主要方向
-        if (deltaLat < deltaLng * 0.3) {
-            return 'horizontal'; // 水平
-        } else if (deltaLng < deltaLat * 0.3) {
-            return 'vertical'; // 垂直
+        // 放寬角度判斷：允許更大的變形，讓字體更自然
+        // 從 0.3 (約17度) 改為 0.6 (約31度)，允許更多傾斜
+        if (deltaLat < deltaLng * 0.6) {
+            return 'horizontal'; // 水平（允許些微傾斜）
+        } else if (deltaLng < deltaLat * 0.6) {
+            return 'vertical'; // 垂直（允許些微傾斜）
         } else {
             return 'diagonal'; // 對角線
         }
@@ -251,7 +252,7 @@ class StreetSegmentPlanner {
         
         // 計算每個字符需要的空間
         const totalChars = chars.length;
-        const charSpacing = 200; // 字符間距（米）
+        const charSpacing = 300; // 增加字符間距（米），給予更多選擇空間
         
         for (let i = 0; i < chars.length; i++) {
             const char = chars[i];
@@ -326,12 +327,18 @@ class StreetSegmentPlanner {
             // 跳過已使用的片段
             if (usedSegmentIds.has(segment.id)) continue;
             
-            // 檢查方向是否匹配
-            if (segment.direction !== targetPosition.direction) continue;
+            // 檢查方向是否匹配（放寬條件：對角線也可以匹配水平或垂直）
+            const directionMatch = segment.direction === targetPosition.direction ||
+                                 (segment.direction === 'diagonal' && 
+                                  (targetPosition.direction === 'horizontal' || targetPosition.direction === 'vertical'));
+            
+            if (!directionMatch) continue;
             
             // 計算位置匹配分數（距離越近越好）
-            const score = Math.abs(segment.centerPoint.lng * 111000 - (targetPosition.x + offsetX)) +
-                         Math.abs(segment.centerPoint.lat * 111000 - targetPosition.y);
+            // 放寬評分標準：降低距離權重，允許更大的位置偏差
+            const distanceX = Math.abs(segment.centerPoint.lng * 111000 - (targetPosition.x + offsetX));
+            const distanceY = Math.abs(segment.centerPoint.lat * 111000 - targetPosition.y);
+            const score = (distanceX + distanceY) * 0.7; // 降低距離權重到 70%
             
             if (score < bestScore) {
                 bestScore = score;
