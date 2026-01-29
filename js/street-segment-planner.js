@@ -53,9 +53,18 @@ class StreetSegmentPlanner {
             const selectedSegments = this.selectSegmentsForText(text, segments);
             console.log(`選擇了 ${selectedSegments.length} 個片段來組成文字`);
             
+            // 放寬要求：只要找到一些片段就繼續，不要求完美匹配
             if (selectedSegments.length === 0) {
                 throw new Error('找不到適合的街道片段來組成文字');
             }
+            
+            // 輸出匹配情況統計
+            const totalNeeded = text.split('').reduce((sum, char) => {
+                const pattern = this.segmentPatterns[char];
+                return sum + (pattern ? pattern.length : 0);
+            }, 0);
+            const matchRate = (selectedSegments.length / totalNeeded * 100).toFixed(1);
+            console.log(`匹配率: ${matchRate}% (${selectedSegments.length}/${totalNeeded} 個片段)`);
             
             // 步驟 4: 規劃一筆畫路徑（允許折返）
             const continuousPath = await this.planContinuousPath(selectedSegments);
@@ -92,9 +101,11 @@ class StreetSegmentPlanner {
     calculateSearchRadius(minDistance, maxDistance) {
         // 根據目標距離計算合適的搜尋範圍
         const avgDistance = (minDistance + maxDistance) / 2;
-        // 放寬搜索範圍：允許更大的搜索半徑，找到更多道路選擇
-        const calculatedRadius = avgDistance * 400; // 增加倍數以找到更多道路
-        return Math.min(5000, Math.max(1000, calculatedRadius)); // 以米為單位，最大 5km
+        // 大幅放寬搜索範圍：路線可以延伸到任何距離，只要總長度符合設定
+        // 使用目標距離的 2 倍作為搜索半徑，確保有足夠的道路可選
+        const calculatedRadius = avgDistance * 2;
+        // 移除最大限制，允許搜索更遠的範圍；保留最小 2km 以確保基本覆蓋
+        return Math.max(2000, calculatedRadius); // 以米為單位，不設上限
     }
 
     // 從 Overpass API 獲取附近街道（帶重試機制）
@@ -252,7 +263,7 @@ class StreetSegmentPlanner {
         
         // 計算每個字符需要的空間
         const totalChars = chars.length;
-        const charSpacing = 300; // 增加字符間距（米），給予更多選擇空間
+        const charSpacing = 500; // 大幅增加字符間距（米），給予更多道路選擇空間
         
         for (let i = 0; i < chars.length; i++) {
             const char = chars[i];
@@ -293,6 +304,8 @@ class StreetSegmentPlanner {
             'bottom': { x: 0, y: -100, direction: 'horizontal' }
         };
         
+        // 嘗試為每個片段找到匹配，但不強制要求全部找到
+        let foundCount = 0;
         for (const segmentName of pattern) {
             const position = segmentPositions[segmentName];
             if (!position) continue;
@@ -312,10 +325,19 @@ class StreetSegmentPlanner {
                     character: char
                 });
                 usedSegmentIds.add(matchedSegment.id);
+                foundCount++;
             }
         }
         
-        return charSegments;
+        // 放寬要求：只要找到至少一半的片段就算成功
+        const minRequired = Math.ceil(pattern.length / 2);
+        if (foundCount >= minRequired) {
+            console.log(`字符 "${char}": 找到 ${foundCount}/${pattern.length} 個片段 (最少需要 ${minRequired})`);
+            return charSegments;
+        } else {
+            console.warn(`字符 "${char}": 只找到 ${foundCount}/${pattern.length} 個片段，不足最少需求 ${minRequired}`);
+            return charSegments; // 仍然返回找到的片段，而不是放棄
+        }
     }
 
     // 尋找最匹配的街道
@@ -323,26 +345,48 @@ class StreetSegmentPlanner {
         let bestMatch = null;
         let bestScore = Infinity;
         
-        for (const segment of availableSegments) {
-            // 跳過已使用的片段
-            if (usedSegmentIds.has(segment.id)) continue;
+        // 優先級策略：先嘗試嚴格匹配，如果找不到則逐步放寬
+        const strategies = [
+            { allowDiagonal: false, allowAnyDirection: false, scoreMultiplier: 1.0 },  // 嚴格匹配
+            { allowDiagonal: true, allowAnyDirection: false, scoreMultiplier: 1.2 },   // 允許對角線
+            { allowDiagonal: true, allowAnyDirection: true, scoreMultiplier: 1.5 }     // 允許任何方向
+        ];
+        
+        for (const strategy of strategies) {
+            for (const segment of availableSegments) {
+                // 跳過已使用的片段
+                if (usedSegmentIds.has(segment.id)) continue;
+                
+                // 檢查方向是否匹配
+                let directionMatch = false;
+                if (strategy.allowAnyDirection) {
+                    directionMatch = true; // 接受任何方向
+                } else if (strategy.allowDiagonal) {
+                    directionMatch = segment.direction === targetPosition.direction ||
+                                   (segment.direction === 'diagonal' && 
+                                    (targetPosition.direction === 'horizontal' || targetPosition.direction === 'vertical'));
+                } else {
+                    directionMatch = segment.direction === targetPosition.direction;
+                }
+                
+                if (!directionMatch) continue;
+                
+                // 大幅簡化評分：只考慮距離，忽略精確位置匹配
+                // 計算相對於起點的距離，而非絕對座標
+                const distanceX = Math.abs(segment.centerPoint.lng * 111000 - (targetPosition.x + offsetX));
+                const distanceY = Math.abs(segment.centerPoint.lat * 111000 - targetPosition.y);
+                const score = (distanceX + distanceY) * 0.3 * strategy.scoreMultiplier; // 大幅降低權重
+                
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestMatch = segment;
+                }
+            }
             
-            // 檢查方向是否匹配（放寬條件：對角線也可以匹配水平或垂直）
-            const directionMatch = segment.direction === targetPosition.direction ||
-                                 (segment.direction === 'diagonal' && 
-                                  (targetPosition.direction === 'horizontal' || targetPosition.direction === 'vertical'));
-            
-            if (!directionMatch) continue;
-            
-            // 計算位置匹配分數（距離越近越好）
-            // 放寬評分標準：降低距離權重，允許更大的位置偏差
-            const distanceX = Math.abs(segment.centerPoint.lng * 111000 - (targetPosition.x + offsetX));
-            const distanceY = Math.abs(segment.centerPoint.lat * 111000 - targetPosition.y);
-            const score = (distanceX + distanceY) * 0.7; // 降低距離權重到 70%
-            
-            if (score < bestScore) {
-                bestScore = score;
-                bestMatch = segment;
+            // 如果在這個策略下找到了匹配，就返回
+            if (bestMatch) {
+                console.log(`使用策略 ${strategies.indexOf(strategy) + 1} 找到匹配片段`);
+                return bestMatch;
             }
         }
         
