@@ -93,31 +93,25 @@ class App {
 
             console.log(`開始生成路線: "${routeText}", ${minDistance}-${maxDistance} km`);
 
-            // 1. 將文字轉換為地理路徑點
-            const textPoints = textToPath.generateTextRoute(
+            // 使用新的街道火柴棒演算法
+            const route = await streetSegmentPlanner.generateStreetRoute(
                 routeText,
-                this.selectedLocation.lat,
-                this.selectedLocation.lng,
-                (minDistance + maxDistance) / 2,
-                { fontWeight: fontStyle }
-            );
-
-            // 2. 規劃路線
-            const route = await routePlanner.planRoute(
-                textPoints,
                 this.selectedLocation.lat,
                 this.selectedLocation.lng,
                 minDistance,
                 maxDistance
             );
 
-            // 3. 在地圖上繪製路線
+            // 在地圖上繪製路線
             const coordinates = route.coordinates.map(p => [p.lat, p.lng]);
             mapManager.drawRoute(coordinates);
 
-            // 4. 儲存路線並顯示結果
-            this.currentRoute = route;
-            this.showResult(route, routeText);
+            // 儲存路線並顯示結果
+            this.currentRoute = {
+                ...route,
+                points: route.coordinates.length
+            };
+            this.showResult(this.currentRoute, routeText);
 
             console.log('路線生成成功');
 
@@ -210,6 +204,9 @@ class App {
         }
     }
 }
+
+// 初始化全域實例
+const streetSegmentPlanner = new StreetSegmentPlanner();
 
 // 當 DOM 載入完成後初始化應用程式
 document.addEventListener('DOMContentLoaded', () => {
