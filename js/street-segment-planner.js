@@ -92,37 +92,76 @@ class StreetSegmentPlanner {
     calculateSearchRadius(minDistance, maxDistance) {
         // 根據目標距離計算合適的搜尋範圍
         const avgDistance = (minDistance + maxDistance) / 2;
-        // 每個字符大約佔 1/4 的距離
-        return Math.max(500, avgDistance * 250); // 以米為單位
+        // 優化：限制最大搜索半徑為 3km，減少 API 負載
+        const calculatedRadius = avgDistance * 200; // 減少倍數從 250 到 200
+        return Math.min(3000, Math.max(500, calculatedRadius)); // 以米為單位，最大 3km
     }
 
-    // 從 Overpass API 獲取附近街道
+    // 從 Overpass API 獲取附近街道（帶重試機制）
     async fetchNearbyStreets(lat, lng, radius) {
+        // 簡化查詢：只搜索主要道路類型，減少 API 負載
         const query = `
-            [out:json][timeout:25];
+            [out:json][timeout:30];
             (
-                way["highway"~"^(residential|tertiary|secondary|primary|footway|path|pedestrian|living_street|unclassified)$"]
+                way["highway"~"^(residential|tertiary|secondary|living_street)$"]
                 (around:${radius},${lat},${lng});
             );
             out geom;
         `;
 
-        try {
-            const response = await fetch(this.overpassApiUrl, {
-                method: 'POST',
-                body: query
-            });
+        console.log(`正在搜索半徑 ${radius}m 內的街道...`);
 
-            if (!response.ok) {
-                throw new Error('Overpass API 請求失敗');
+        // 重試機制：最多嘗試 3 次
+        const maxRetries = 3;
+        const retryDelay = 2000; // 2 秒
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`嘗試第 ${attempt} 次查詢...`);
+                
+                const response = await fetch(this.overpassApiUrl, {
+                    method: 'POST',
+                    body: query
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Overpass API 錯誤:', response.status, errorText);
+                    
+                    // 如果是 429 (Too Many Requests) 或 504 (Gateway Timeout)，可以重試
+                    if ((response.status === 429 || response.status === 504) && attempt < maxRetries) {
+                        console.log(`等待 ${retryDelay}ms 後重試...`);
+                        await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        continue;
+                    }
+                    
+                    throw new Error(`Overpass API 請求失敗: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log(`成功獲取 ${data.elements?.length || 0} 條街道數據`);
+                
+                if (!data.elements || data.elements.length === 0) {
+                    throw new Error('搜索範圍內沒有找到街道數據，請嘗試其他位置');
+                }
+                
+                return data.elements;
+                
+            } catch (error) {
+                console.error(`第 ${attempt} 次嘗試失敗:`, error);
+                
+                // 如果是最後一次嘗試，拋出錯誤
+                if (attempt === maxRetries) {
+                    if (error.message.includes('fetch')) {
+                        throw new Error('網絡連接失敗，請檢查網絡連接後重試');
+                    }
+                    throw error;
+                }
+                
+                // 否則等待後重試
+                console.log(`等待 ${retryDelay}ms 後重試...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
-
-            const data = await response.json();
-            return data.elements || [];
-            
-        } catch (error) {
-            console.error('獲取街道數據失敗:', error);
-            throw error;
         }
     }
 
