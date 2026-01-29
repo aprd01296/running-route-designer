@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>跑步路線設計器 - Running Route Designer</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏃‍♂️ 跑步路線設計器</h1>
+            <p>設計屬於你的文字路線</p>
+        </header>
+
+        <div class="main-content">
+            <!-- 左側控制面板 -->
+            <div class="control-panel">
+                <div class="section">
+                    <h3>📍 步驟 1: 選擇起點</h3>
+                    <p class="hint">在地圖上點擊選擇起點位置</p>
+                    <div id="location-info" class="info-box">
+                        <span class="placeholder">尚未選擇起點</span>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>✏️ 步驟 2: 設定路線參數</h3>
+                    
+                    <label for="route-text">想要跑出的文字：</label>
+                    <input type="text" id="route-text" placeholder="例如: 2026, LOVE, RUN" maxlength="10">
+                    
+                    <label for="distance-min">距離範圍（公里）：</label>
+                    <div class="distance-range">
+                        <input type="number" id="distance-min" min="1" max="50" value="5" step="0.5">
+                        <span>~</span>
+                        <input type="number" id="distance-max" min="1" max="50" value="10" step="0.5">
+                    </div>
+
+                    <label for="font-style">文字風格：</label>
+                    <select id="font-style">
+                        <option value="bold">粗體 (Bold)</option>
+                        <option value="normal">標準 (Normal)</option>
+                        <option value="italic">斜體 (Italic)</option>
+                    </select>
+                </div>
+
+                <div class="section">
+                    <button id="generate-btn" class="btn-primary" disabled>
+                        🎯 生成路線
+                    </button>
+                    <div id="loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <span>正在規劃路線...</span>
+                    </div>
+                </div>
+
+                <div class="section" id="result-section" style="display: none;">
+                    <h3>✅ 路線結果</h3>
+                    <div id="route-info" class="info-box"></div>
+                    <button id="download-gpx-btn" class="btn-success">
+                        📥 下載 GPX 檔案
+                    </button>
+                    <button id="reset-btn" class="btn-secondary">
+                        🔄 重新設計
+                    </button>
+                </div>
+            </div>
+
+            <!-- 右側地圖 -->
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Made with ❤️ for runners | Data © OpenStreetMap contributors</p>
+        </footer>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- 應用程式 JS -->
+    <script src="js/map.js"></script>
+    <script src="js/text-to-path.js"></script>
+    <script src="js/route-planner.js"></script>
+    <script src="js/gpx-generator.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
