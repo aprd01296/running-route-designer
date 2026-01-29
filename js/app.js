@@ -102,6 +102,16 @@ class App {
                 maxDistance
             );
 
+            console.log('生成的路線結構:', route);
+            console.log('coordinates 類型:', typeof route.coordinates);
+            console.log('是否為陣列:', Array.isArray(route.coordinates));
+
+            // 驗證返回的數據結構
+            if (!route || !route.coordinates || !Array.isArray(route.coordinates)) {
+                console.error('路線數據結構錯誤:', route);
+                throw new Error('路線數據結構不正確');
+            }
+
             // 在地圖上繪製路線
             const coordinates = route.coordinates.map(p => [p.lat, p.lng]);
             mapManager.drawRoute(coordinates);
