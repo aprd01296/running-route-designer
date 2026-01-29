@@ -57,7 +57,7 @@ class StreetSegmentPlanner {
             const continuousPath = await this.planContinuousPath(selectedSegments);
             
             // 步驟 5: 調整路徑以符合目標距離
-            const finalRoute = this.adjustRouteDistance(
+            const finalRoute = await this.adjustRouteDistance(
                 continuousPath, 
                 minDistance, 
                 maxDistance
@@ -371,7 +371,7 @@ class StreetSegmentPlanner {
     }
 
     // 調整路徑距離
-    adjustRouteDistance(path, minDistance, maxDistance) {
+    async adjustRouteDistance(path, minDistance, maxDistance) {
         const currentDistance = this.calculateTotalDistance(path);
         const targetDistance = (minDistance + maxDistance) / 2;
         
@@ -379,7 +379,7 @@ class StreetSegmentPlanner {
         
         if (currentDistance < minDistance) {
             // 距離不足，需要延長路徑
-            return this.extendPath(path, minDistance);
+            return await this.extendPath(path, minDistance);
         } else if (currentDistance > maxDistance) {
             // 距離過長，需要簡化路徑
             return this.simplifyPath(path, maxDistance);
